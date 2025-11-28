@@ -17,6 +17,14 @@ Financial markets generate gigabytes of unstructured text data daily. Tradl Flow
 
 ---
 
+## 💸 Zero Cost Architecture
+Unlike typical AI wrappers that rely on expensive APIs (OpenAI, Gemini), **Tradl Flow is 100% Free to Run.**
+*   **Local Inference:** Uses **Ollama** to run Llama 3.2 locally on your machine.
+*   **No API Keys Required:** The entire intelligence stack (LLM + Vector DB) runs offline.
+*   **Free Data:** Uses `yfinance` and `GoogleNews` for real-time data without subscription fees.
+
+---
+
 ## 🛠️ Technical Architecture
 
 ### 1. High-Level Data Flow
