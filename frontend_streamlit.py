@@ -2,8 +2,7 @@ import streamlit as st
 import requests
 import time
 
-# UPDATED: Pointing to the correct backend port
-API_URL = "http://localhost:8002"
+API_URL = "http://localhost:8002"  # CORRECTED: Backend runs on 8002
 
 # --- THEME MANAGEMENT ---
 if 'theme' not in st.session_state:
@@ -12,53 +11,45 @@ if 'theme' not in st.session_state:
 def toggle_theme():
     st.session_state.theme = 'light' if st.session_state.theme == 'dark' else 'dark'
 
-# --- PAGE CONFIGURATION & MENU ITEMS ---
+# --- PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="Tradl Flow | Financial Intelligence", 
-    layout="wide", 
+    page_title="Tradl Flow | Financial Intelligence",
+    layout="wide",
     page_icon="🌊",
     initial_sidebar_state="expanded",
     menu_items={
         'Get Help': 'https://github.com/papilo-topato',
-        'Report a bug': "https://x.com/papilo_topato",
-        'About': """
-        ### Tradl Flow v3.0
-        **Built by Raghuram K S**
-        
-        An AI-Powered Financial Intelligence System built for the Tradl Hackathon.
-        Integrates Real-time News, Stock Data, and Context-Aware AI Agents.
-        """
+        'About': "Tradl Flow v3.0 - Built by Raghuram K S"
     }
 )
 
-# --- DYNAMIC CSS INJECTION ---
+# --- DYNAMIC CSS ---
 if st.session_state.theme == 'dark':
     bg_color = "#0e1117"
     text_color = "#ffffff"
     card_bg = "#1e1e1e"
-    metric_label = "#b0b0b0"
-    shadow = "rgba(0,0,0,0.5)"
+    viz_bg = "#2b2b2b"
+    viz_border = "#444"
 else:
-    bg_color = "#ffffff"       # Pure White Background
-    text_color = "#000000"     # Pitch Black Text
-    card_bg = "#f0f2f6"        # Light Gray Card to differentiate from BG
-    metric_label = "#31333F"   # Dark Gray for labels
-    shadow = "rgba(0,0,0,0.1)"
+    bg_color = "#ffffff"
+    text_color = "#000000"
+    card_bg = "#f0f2f6"
+    viz_bg = "#e0e0e0"
+    viz_border = "#ccc"
 
 st.markdown(f"""
     <style>
-    /* Force Global Background and Text */
     .stApp {{ background-color: {bg_color}; color: {text_color}; }}
-    
-    /* Force ALL headings and text to adopt the theme color */
-    h1, h2, h3, h4, h5, h6, p, div, span, li {{ 
-        color: {text_color} !important; 
+    p, h1, h2, h3, div, li, span {{ color: {text_color}; }}
+
+    /* Sidebar Styling */
+    [data-testid="stSidebar"] {{
+        background-color: {card_bg};
     }}
-    
-    /* Exceptions for specific badges/buttons that must remain white */
-    .positive {{ color: #009900 !important; font-weight: bold; }} /* Darker Green for visibility on light mode */
-    .negative {{ color: #cc0000 !important; font-weight: bold; }} /* Darker Red for visibility */
-    
+    [data-testid="stSidebar"] * {{
+        color: {text_color} !important;
+    }}
+
     /* Card Styling */
     .market-card {{
         background-color: {card_bg};
@@ -66,24 +57,61 @@ st.markdown(f"""
         border-radius: 12px;
         margin-bottom: 15px;
         border-left: 4px solid #4CAF50;
-        box-shadow: 0 2px 5px {shadow};
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }}
-    
-    /* Fix for Metrics inside HTML cards */
-    .market-card h1 {{ color: {text_color} !important; margin: 0; }}
-    .market-card div {{ color: {text_color}; }}
-    
     .news-card {{
         background-color: {card_bg};
         padding: 15px;
         border-radius: 8px;
         margin-bottom: 10px;
-        border: 1px solid #ddd; /* Softer border for light mode */
+        border: 1px solid #333;
     }}
-    
-    .news-card div {{ color: {text_color}; }}
-    
-    /* Profile Link Styling */
+
+    /* VISUALIZATION PIPELINE CSS */
+    .viz-container {{
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: {viz_bg};
+        padding: 20px;
+        border-radius: 15px;
+        margin-bottom: 25px;
+        border: 1px solid {viz_border};
+    }}
+    .viz-node {{
+        background-color: {card_bg};
+        border: 2px solid #555;
+        padding: 10px 15px;
+        border-radius: 8px;
+        text-align: center;
+        width: 18%;
+        font-size: 14px;
+        font-weight: bold;
+        transition: all 0.3s ease;
+        opacity: 0.4;
+        color: {text_color};
+    }}
+    .viz-arrow {{
+        font-size: 20px;
+        color: #555;
+        font-weight: bold;
+    }}
+
+    /* ACTIVE STATES */
+    .viz-active {{
+        border-color: #4CAF50;
+        box-shadow: 0 0 15px rgba(76, 175, 80, 0.6);
+        transform: scale(1.05);
+        opacity: 1;
+        color: #4CAF50 !important;
+    }}
+    .viz-completed {{
+        border-color: #4CAF50;
+        background-color: rgba(76, 175, 80, 0.1);
+        opacity: 1;
+    }}
+
+    /* Profile Links */
     .profile-link {{
         text-decoration: none;
         color: {text_color} !important;
@@ -97,98 +125,103 @@ st.markdown(f"""
         margin-bottom: 10px;
     }}
     .profile-link:hover {{ border-color: #4CAF50; color: #4CAF50 !important; }}
-    
-    /* Footer */
-    .footer {{
-        color: {metric_label} !important;
-    }}
-    
-    /* Input Field Styling (Search Box) */
-    .stTextInput > div > div > input {{
-        color: {text_color};
-        background-color: {card_bg};
-    }}
 
-    /* Safari Support Fix & General Reset */
-    * {{
-        -webkit-user-select: auto !important;
-        user-select: auto !important;
-    }}
-    div {{
-        -webkit-user-select: auto !important;
+    .footer {{
+        position: fixed; bottom: 0; left: 0; width: 100%;
+        background-color: {card_bg}; text-align: center;
+        padding: 10px; font-size: 12px; border-top: 1px solid #333; opacity:0.8;
+        color: {text_color};
     }}
     </style>
-    
-    <script>
-    // Robust JS Injection using MutationObserver to catch Streamlit's dynamic rendering
-    const observer = new MutationObserver((mutations) => {{
-        mutations.forEach((mutation) => {{
-            // 1. Fix Autocomplete on Search Input
-            const inputs = document.querySelectorAll('input');
-            inputs.forEach(input => {{
-                if (!input.hasAttribute('autocomplete')) {{
-                    input.setAttribute('autocomplete', 'off');
-                }}
-            }});
-            
-            // 2. Fix ARIA on Buttons
-            const buttons = document.querySelectorAll('button');
-            buttons.forEach(btn => {{
-                if (!btn.getAttribute('aria-label')) {{
-                    btn.setAttribute('aria-label', 'Button');
-                }}
-            }});
-            
-            // 3. Fix ARIA on Main Menu (Specific Target)
-            const menu = document.querySelector('[data-testid="stMainMenu"]');
-            if (menu && menu.getAttribute('aria-expanded') === 'false') {{
-                menu.setAttribute('aria-expanded', 'true'); // Hack to satisfy validator
-            }}
-        }});
-    }});
-    
-    // Start observing the document body
-    observer.observe(document.body, {{ childList: true, subtree: true }});
-    </script>
 """, unsafe_allow_html=True)
 
-# --- LOADING LOGIC ---
-def fetch_data_with_progress(query):
-    progress_bar = st.progress(0, text="Initializing Tradl Flow Engine...")
-    
-    # Step 1: Resolve Query
-    progress_bar.progress(20, text="🤖 Agents resolving Entity & Mapping Parent Companies...")
+# --- PIPELINE VISUALIZER COMPONENT ---
+def render_pipeline_viz(step=0):
+    """
+    Renders a live HTML Flowchart.
+    Step 0: Idle
+    Step 1: User -> Resolver
+    Step 2: Resolver -> API
+    Step 3: API -> Ranker
+    Step 4: Done
+    """
+
+    # Define Classes based on step
+    s1 = "viz-active" if step == 1 else ("viz-completed" if step > 1 else "")
+    s2 = "viz-active" if step == 2 else ("viz-completed" if step > 2 else "")
+    s3 = "viz-active" if step == 3 else ("viz-completed" if step > 3 else "")
+    s4 = "viz-active" if step == 4 else ("viz-completed" if step > 4 else "")
+
+    html_code = f"""
+    <div class="viz-container">
+        <div class="viz-node {s1}">
+            👤 User Intent<br>
+            <span style="font-size:10px">NLP Analysis</span>
+        </div>
+        <div class="viz-arrow">→</div>
+        <div class="viz-node {s2}">
+            🧠 Smart Resolver<br>
+            <span style="font-size:10px">Entity Mapping</span>
+        </div>
+        <div class="viz-arrow">→</div>
+        <div class="viz-node {s3}">
+            🌐 Data Swarm<br>
+            <span style="font-size:10px">Live APIs & Scrapers</span>
+        </div>
+        <div class="viz-arrow">→</div>
+        <div class="viz-node {s4}">
+            🤖 AI Ranker<br>
+            <span style="font-size:10px">Context Scoring</span>
+        </div>
+    </div>
+    """
+    return html_code
+
+# --- DATA FETCHING WITH VISUALS ---
+def fetch_data_with_visuals(query):
+    # Create a placeholder for the visualizer
+    viz_placeholder = st.empty()
+
+    # STEP 1: RESOLVING
+    viz_placeholder.markdown(render_pipeline_viz(step=1), unsafe_allow_html=True)
+    time.sleep(0.3)  # Tiny visual delay for effect
+
+    viz_placeholder.markdown(render_pipeline_viz(step=2), unsafe_allow_html=True)
     try:
+        # Actual Backend Call
         res = requests.post(f"{API_URL}/resolve_and_fetch", json={"query": query})
         data = res.json()
     except:
-        progress_bar.empty()
-        return None, None
-        
-    if data.get("type") == "error":
-        progress_bar.empty()
+        viz_placeholder.empty()
         return None, None
 
-    # Step 2: Fetch News
+    if data.get("type") == "error":
+        viz_placeholder.empty()
+        return None, None
+
+    # STEP 2: FETCHING & RANKING
+    viz_placeholder.markdown(render_pipeline_viz(step=3), unsafe_allow_html=True)
+
     term_display = data.get('search_terms', [query])[0]
-    progress_bar.progress(60, text=f"🌍 Scanning Global Media for '{term_display}'...")
-    
     terms_str = ",".join(data.get('search_terms', [query]))
+
+    # Actual Backend Call
     news_res = requests.post(f"{API_URL}/ingest_news", json={"query": terms_str})
     news_data = news_res.json().get('articles', [])
-    
-    progress_bar.progress(100, text="✨ Rendering Intelligence Dashboard...")
-    time.sleep(0.5)
-    progress_bar.empty()
-    
+
+    # STEP 3: DONE
+    viz_placeholder.markdown(render_pipeline_viz(step=4), unsafe_allow_html=True)
+    time.sleep(0.8)  # Let user see the "Complete" state
+    viz_placeholder.empty()  # Remove it to show results clean
+
     return data, news_data
 
-# --- RENDER FUNCTIONS ---
+# --- RENDER FUNCTIONS (Stocks, Grid, News) ---
 def render_stock(data):
     info = data['data']
     color = "positive" if info['change'] >= 0 else "negative"
     if "note" in data: st.info(f"ℹ️ {data['note']}")
-        
+
     st.markdown(f"""
     <div class="market-card">
         <div style="display:flex; justify-content:space-between;">
@@ -197,7 +230,7 @@ def render_stock(data):
         </div>
     </div>
     """, unsafe_allow_html=True)
-    
+
     c1, c2, c3 = st.columns(3)
     c1.metric("Market Cap", f"₹{info['market_cap']}")
     c2.metric("P/E Ratio", f"{info['pe_ratio']}")
@@ -210,7 +243,7 @@ def render_grid_view(data):
         color = "positive" if stock['change'] >= 0 else "negative"
         with cols[idx % 3]:
             st.markdown(f"""
-            <div class="market-card" style="padding:15px; position:relative;">
+            <div class="market-card" style="padding:15px;">
                 <div style="font-size:12px; color:#888;">{stock['symbol']}</div>
                 <div style="font-size:20px; font-weight:bold;">{stock.get('currency','')} {stock['price']}</div>
                 <div class="{color}">{stock['change']} ({stock['percent_change']}%)</div>
@@ -226,7 +259,7 @@ def render_news(articles):
             badge = '<span style="background:#ff4444; color:white; padding:2px 6px; border-radius:4px; font-size:10px; margin-right:5px;">🔥 BREAKING</span>'
         elif "hour" in item['date']:
             badge = '<span style="background:#4CAF50; color:white; padding:2px 6px; border-radius:4px; font-size:10px; margin-right:5px;">LIVE</span>'
-            
+
         st.markdown(f"""
         <div class="news-card">
             <div style="font-size:11px; color:#888;">{badge} 📅 {item['date']} | {item['source']}</div>
@@ -235,75 +268,64 @@ def render_news(articles):
         </div>
         """, unsafe_allow_html=True)
 
+# --- HELPER: PERFORM SEARCH ---
+def perform_search(query_text):
+    """Executes the search and renders results"""
+    if query_text.lower() == "market":
+        st.info("Market Overview Mode")
+    else:
+        data, news = fetch_data_with_visuals(query_text)
+        if data:
+            if data['type'] == 'stock': render_stock(data)
+            elif data['type'] in ['commodity', 'grid_view']: render_grid_view(data)
+            render_news(news)
+        else:
+            st.error(f"❌ Data not found for '{query_text}'. Try a different term.")
+
 # --- NAVIGATION SIDEBAR ---
 with st.sidebar:
     st.title("🌊 Tradl Flow")
     st.caption("AI-Powered Market Intelligence")
-    
     page = st.radio("Navigation", ["🚀 Terminal", "👤 About the Architect"])
-    
     st.divider()
-    
-    # Theme Toggle
     btn_label = "☀️ Light Mode" if st.session_state.theme == 'dark' else "🌙 Dark Mode"
     st.button(btn_label, on_click=toggle_theme)
-    
     st.markdown("---")
-    st.caption("© 2025 Tradl Flow")
     st.caption("Built by **Raghuram K S**")
 
-# --- PAGE ROUTING ---
-
+# --- MAIN ROUTING ---
 if page == "🚀 Terminal":
-    # === TERMINAL VIEW ===
     st.title("🌊 Tradl Flow")
     st.markdown("#### The Intelligent Market Workspace")
-    
+
     query = st.text_input("Search (e.g., 'Domino\\'s', 'Tata', 'Gold', 'Banks')...", placeholder="Type a company, sector, or brand...")
 
     if query:
-        if query.lower() == "market":
-            st.info("Market Overview Mode")
-        else:
-            data, news = fetch_data_with_progress(query)
-            if data:
-                if data['type'] == 'stock': render_stock(data)
-                elif data['type'] in ['commodity', 'grid_view']: render_grid_view(data)
-                render_news(news)
-            else:
-                st.error("❌ Data not found. Try a different term.")
+        perform_search(query)
     else:
-        # Default Landing
-        st.info("👋 Welcome to Tradl Flow. Start by searching for a stock (e.g., 'Zomato'), a sector ('Banks'), or a group ('Adani').")
-        
-        # Quick access chips
+        st.info("👋 Welcome to Tradl Flow. Start by searching for a stock, sector, or brand.")
+
+        st.write("OR Select a Quick Access Module:")
         c1, c2, c3, c4 = st.columns(4)
-        if c1.button("🏦 Banks"): fetch_data_with_progress("Banks")
-        if c2.button("🚗 Auto"): fetch_data_with_progress("Auto")
-        if c3.button("🛢️ Oil"): fetch_data_with_progress("Oil")
-        if c4.button("🪙 Gold"): fetch_data_with_progress("Gold")
+        if c1.button("🏦 Banks"): perform_search("Banks")
+        if c2.button("🚗 Auto"): perform_search("Auto")
+        if c3.button("🛢️ Oil"): perform_search("Oil")
+        if c4.button("🪙 Gold"): perform_search("Gold")
 
 elif page == "👤 About the Architect":
-    # === PROFILE VIEW ===
     st.title("Raghuram K S")
     st.markdown("#### 🚀 Engineer | Product Thinker | AI & No-Code Builder")
-    
-    # Social Links Row
-    st.markdown(f"""
-    <div>
-        <a href="https://www.linkedin.com/in/papilo-topato" class="profile-link" target="_blank">🔗 LinkedIn</a>
-        <a href="https://github.com/papilo-topato" class="profile-link" target="_blank">💻 GitHub</a>
-        <a href="https://x.com/papilo_topato" class="profile-link" target="_blank">🐦 X (Twitter)</a>
-        <a href="https://www.youtube.com/@papilo-topato" class="profile-link" target="_blank">🎥 YouTube</a>
-        <a href="https://instagram.com/papilo_topato?igshid=ZDc4ODBmNjlmNQ==" class="profile-link" target="_blank">📸 Instagram</a>
-    </div>
-    <br>
+    st.markdown("""
+    <a href="https://www.linkedin.com/in/papilo-topato" class="profile-link" target="_blank">🔗 LinkedIn</a>
+    <a href="https://github.com/papilo-topato" class="profile-link" target="_blank">💻 GitHub</a>
+    <a href="https://x.com/papilo_topato" class="profile-link" target="_blank">🐦 X (Twitter)</a>
+    <a href="https://www.youtube.com/@papilo-topato" class="profile-link" target="_blank">🎥 YouTube</a>
+    <a href="https://instagram.com/papilo_topato?igshid=ZDc4ODBmNjlmNQ==" class="profile-link" target="_blank">📸 Instagram</a>
     """, unsafe_allow_html=True)
-    
+
     st.divider()
-    
+
     col1, col2 = st.columns([2, 1])
-    
     with col1:
         st.markdown("""
         ### About Me
@@ -311,15 +333,15 @@ elif page == "👤 About the Architect":
 
         Previously, I worked as a **Management Trainee** in the central think tank at **Electronic Payment and Services (EPS)**, where I operated at the crossroads of business strategy, product thinking, and hands-on tech execution. From shaping growth strategies to building AI capabilities from scratch, I learned to turn complexity into clarity—and ideas into impact.
 
-        With a background in **Electronics & Communication Engineering** and experience as a **Smart India Hackathon 2022 Hardware Edition finalist**, I’m deeply curious about how intelligence can be embedded into systems—whether that’s smarter software, automated workflows, or hardware-AI hybrids that blur the line between physical and digital.
+        With a background in **Electronics & Communication Engineering** and experience as a **Smart India Hackathon 2022 Hardware Edition finalist**, I'm deeply curious about how intelligence can be embedded into systems—whether that's smarter software, automated workflows, or hardware-AI hybrids that blur the line between physical and digital.
         """)
-        
+
         st.markdown("""
         ### 💡 My Philosophy
         **"In the world of endless paths, identity is the compass."**
-        
-        I am a great believer that **imagination is greater than knowledge**. In the age of AI, you only need imagination to see and articulate what you want. I love the "nutcracker" jobs—building dreams with limited tools. 
-        
+
+        I am a great believer that **imagination is greater than knowledge**. In the age of AI, you only need imagination to see and articulate what you want. I love the "nutcracker" jobs—building dreams with limited tools.
+
         I am an **Engineer by heart, Child by soul**.
         *   **Engineer:** Practical, bottling down ideas to make them work.
         *   **Child:** Fast learner, imagining endlessly beyond boundaries.
@@ -329,7 +351,7 @@ elif page == "👤 About the Architect":
     with col2:
         st.markdown("""
         ### 🎯 Focus Areas
-        
+
         **🤖 AI & Automation**
         Building practical AI/ML solutions, experimenting with LLMs, and using no-code/low-code tools to rapidly prototype intelligent workflows.
 
@@ -342,12 +364,12 @@ elif page == "👤 About the Architect":
         **💡 Product & Innovation**
         Crafting solutions that work by asking the right "what if?" questions.
         """)
-    
-    st.info("🤝 If you're working on something interesting in AI, automation, product, or no-code, or if you’re exploring how hardware and intelligence merge—let’s connect.")
+
+    st.info("🤝 If you're working on something interesting in AI, automation, product, or no-code, or if you're exploring how hardware and intelligence merge—let's connect.")
 
 # --- FOOTER ---
 st.markdown("""
-    <div style="position:fixed; bottom:0; left:0; width:100%; text-align:center; background-color:rgba(0,0,0,0); pointer-events:none; font-size:12px; opacity:0.7;">
+    <div class="footer">
         Developed and built by <b>Raghuram K S</b>
     </div>
 """, unsafe_allow_html=True)

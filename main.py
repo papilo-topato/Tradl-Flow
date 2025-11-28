@@ -5,7 +5,17 @@ from database import global_db
 from stocks import resolve_query, get_live_data, get_commodity_snapshot, get_market_overview, get_market_ticker # <--- UPDATE IMPORTS
 from processor import search_topic_news
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="Financial News AI")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class NewsRequest(BaseModel):
     text: str
