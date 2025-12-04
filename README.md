@@ -101,6 +101,18 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+## 📦 Tech Stack & Packages Used
+*   **Core Framework**: [LangChain](https://www.langchain.com/) & [LangGraph](https://langchain-ai.github.io/langgraph/) (Agentic Workflows)
+*   **LLM Engine**: [Ollama](https://ollama.com/) (Running Llama 3.2 locally)
+*   **Frontend**: [Streamlit](https://streamlit.io/) (Interactive Dashboard)
+*   **Backend**: [FastAPI](https://fastapi.tiangolo.com/) (High-performance API)
+*   **Data Sources**: 
+    *   `yfinance` (Market Data)
+    *   `GoogleNews` (News Aggregation)
+    *   `BeautifulSoup4` (Web Scraping)
+*   **Vector Database**: [ChromaDB](https://www.trychroma.com/) (Document Embeddings)
+
+
 ### 4. Run the System
 **Terminal 1 (Backend Engine):**
 ```bash
