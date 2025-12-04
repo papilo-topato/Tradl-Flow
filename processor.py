@@ -2,6 +2,34 @@ from GoogleNews import GoogleNews
 import re
 import datetime
 
+try:
+    from textblob import TextBlob
+    TEXTBLOB_AVAILABLE = True
+except ImportError:
+    TEXTBLOB_AVAILABLE = False
+    print("⚠️ TextBlob not installed. Sentiment analysis will be disabled.")
+
+def analyze_sentiment(text):
+    """
+    Returns a sentiment label and score using TextBlob.
+    Sentiment is based on polarity: -1 (negative) to +1 (positive)
+    """
+    if not TEXTBLOB_AVAILABLE:
+        return "⚪ Neutral"
+
+    try:
+        analysis = TextBlob(text)
+        polarity = analysis.sentiment.polarity
+
+        if polarity > 0.1:
+            return "🟢 Bullish"
+        elif polarity < -0.1:
+            return "🔴 Bearish"
+        else:
+            return "⚪ Neutral"
+    except:
+        return "⚪ Neutral"
+
 def calculate_priority(date_str, text):
     """
     Assigns a score: Higher is newer/more relevant.
@@ -45,20 +73,24 @@ def search_topic_news(query_list):
         for item in results[:6]:
             if item['title'] not in seen_titles:
                 seen_titles.add(item['title'])
-                
+
                 date_str = item.get('date', 'Unknown')
                 text = f"{item['title']}. {item['desc']}"
-                
+
                 # Calculate Rank
                 rank = calculate_priority(date_str, text)
-                
+
+                # Calculate Sentiment
+                sentiment = analyze_sentiment(text)
+
                 all_articles.append({
                     "text": item['title'], # Cleaner display
                     "desc": item['desc'],
                     "source": item['media'],
                     "link": item['link'],
                     "date": date_str,
-                    "rank": rank
+                    "rank": rank,
+                    "sentiment": sentiment  # NEW FIELD
                 })
         googlenews.clear()
     

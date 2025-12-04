@@ -154,6 +154,7 @@ starlette==0.48.0
 streamlit==1.51.0
 sympy==1.14.0
 tenacity==9.1.2
+textblob==0.17.1
 threadpoolctl==3.6.0
 tokenizers==0.22.1
 toml==0.10.2
