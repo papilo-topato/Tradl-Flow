@@ -1,5 +1,6 @@
 # stocks.py
 import yfinance as yf
+import requests
 
 # 1. COMMODITIES (Global Tickers)
 COMMODITY_TICKERS = {
@@ -8,157 +9,253 @@ COMMODITY_TICKERS = {
     "Crude Oil": "CL=F",
     "Brent Oil": "BZ=F",
     "Natural Gas": "NG=F",
-    "Copper": "HG=F"
+    "Copper": "HG=F",
+    "Bitcoin": "BTC-USD"
 }
 
-# 2. SECTOR MAP (Sector Name -> Top Stocks)
+# 2. SECTOR MAP
 SECTOR_MAP = {
     "BANK": ["HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "AXISBANK.NS", "KOTAKBANK.NS"],
     "BANKING": ["HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "AXISBANK.NS", "KOTAKBANK.NS"],
-    "AUTO": ["TATAMOTORS.NS", "M&M.NS", "MARUTI.NS", "BAJAJ-AUTO.NS"],
+    "AUTO": ["TATAMOTORS.NS", "M&M.NS", "MARUTI.NS", "BAJAJ-AUTO.NS", "EICHERMOT.NS"],
     "IT": ["TCS.NS", "INFY.NS", "HCLTECH.NS", "WIPRO.NS", "TECHM.NS"],
-    "FMCG": ["ITC.NS", "HINDUNILVR.NS", "NESTLEIND.NS", "BRITANNIA.NS"],
-    "METAL": ["TATASTEEL.NS", "HINDALCO.NS", "VEDL.NS", "JSWSTEEL.NS"]
+    "FMCG": ["ITC.NS", "HINDUNILVR.NS", "NESTLEIND.NS", "BRITANNIA.NS", "TATACONSUM.NS"],
+    "METAL": ["TATASTEEL.NS", "HINDALCO.NS", "VEDL.NS", "JSWSTEEL.NS", "COALINDIA.NS"]
 }
 
-# 3. EXISTING MAPS
+# 3. MANUAL OVERRIDES (Brand -> Stock Ticker)
 BRAND_TO_STOCK = {
-    "DMART": "AVENUESUPER.NS", "DOMINOS": "JUBLFOOD.NS", "DOMINO'S": "JUBLFOOD.NS",
-    "ZOMATO": "ZOMATO.NS", "SWIGGY": "SWIGGY.NS", "PAYTM": "PAYTM.NS",
-    "MAGGI": "NESTLEIND.NS", "JAGUAR": "TATAMOTORS.NS",
-    "PIZZA HUT": "DEVYANI.NS", "KFC": "DEVYANI.NS",
-    "ZUDIO": "TRENT.NS", "WESTSIDE": "TRENT.NS",
-    "GOOGLE": "GOOGL"
+    "DOMINOS": "JUBLFOOD.NS", "DOMINO'S": "JUBLFOOD.NS", "JUBILANT FOODWORKS": "JUBLFOOD.NS",
+    "DMART": "AVENUESUPER.NS", "AVENUE SUPERMARTS": "AVENUESUPER.NS",
+    "GOOGLE": "GOOGL",
+    "MAGGI": "NESTLEIND.NS", "JLR": "TATAMOTORS.NS",
+    "ZOMATO": "ZOMATO.NS", "SWIGGY": "SWIGGY.NS",
+    "SBI": "SBIN.NS", "SBI BANK": "SBIN.NS", "STATE BANK OF INDIA": "SBIN.NS",
+    "HDFC": "HDFCBANK.NS", "HDFC BANK": "HDFCBANK.NS"
 }
+
+# 4. PARENT COMPANY NAMES (For Better News Search)
+# When finding news, we want "Avenue Supermarts", not just "AVENUESUPER"
+PARENT_NAMES = {
+    "JUBLFOOD.NS": "Jubilant Foodworks",
+    "AVENUESUPER.NS": "Avenue Supermarts",
+    "SBIN.NS": "State Bank of India",
+    "HDFCBANK.NS": "HDFC Bank"
+}
+
+# 5. GROUP MAP
 GROUP_MAP = {
-    "TATA": ["TCS.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TITAN.NS", "TRENT.NS", "TATAPOWER.NS"],
+    "TATA": ["TCS.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TITAN.NS", "TATAPOWER.NS"],
     "RELIANCE": ["RELIANCE.NS", "JIOFIN.NS", "JUSTDIAL.NS"],
-    "ADANI": ["ADANIENT.NS", "ADANIPORTS.NS", "ADANIGREEN.NS", "ADANIPOWER.NS"],
-    "MAHINDRA": ["M&M.NS", "TECHM.NS", "M&MFIN.NS"],
-    "HDFC": ["HDFCBANK.NS", "HDFCLIFE.NS", "HDFCAMC.NS"]
+    "ADANI": ["ADANIENT.NS", "ADANIPORTS.NS", "ADANIGREEN.NS", "ADANIPOWER.NS", "AWL.NS"],
+    "MAHINDRA": ["M&M.NS", "TECHM.NS", "M&MFIN.NS"]
 }
+
+def search_symbol_on_yahoo(query):
+    try:
+        url = f"https://query2.finance.yahoo.com/v1/finance/search?q={query}&quotesCount=1&newsCount=0"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        res = requests.get(url, headers=headers, timeout=3)
+        data = res.json()
+        if 'quotes' in data and len(data['quotes']) > 0:
+            for quote in data['quotes']:
+                symbol = quote['symbol']
+                if symbol.endswith(".NS") or symbol.endswith(".BO"):
+                    return symbol
+            return data['quotes'][0]['symbol']
+    except:
+        pass
+    return None
 
 def resolve_query(query):
-    """
-    Determines if query is a Commodity, Sector, Group, or Stock.
-    """
-    q = query.upper().strip()
+    q = " ".join(query.upper().split())
 
-    # CASE A: Commodities
-    if "COMMODITY" in q or "COMMODITIES" in q or q in ["GOLD", "OIL", "SILVER"]:
-        return {
-            "type": "commodity_market",
-            "name": "Global Commodities",
-            "search_terms": ["Commodity Market News", "Gold Price Outlook", "Crude Oil Analysis"]
-        }
+    # Commodity
+    if "COMMODITY" in q or q in [k.upper() for k in COMMODITY_TICKERS.keys()]:
+        return {"type": "commodity_market", "name": "Global Commodities", "search_terms": ["Commodity Market News"]}
 
-    # CASE B: Sectors (e.g., "Banks", "Auto Sector")
+    # Sector
     for sector, stocks in SECTOR_MAP.items():
         if sector in q:
-            return {
-                "type": "sector",
-                "name": f"{sector.title()} Sector",
-                "symbols": stocks,
-                "search_terms": [f"{sector.title()} Sector News", f"Indian {sector.title()} Stocks Outlook"]
-            }
+            return {"type": "sector", "name": f"{sector.title()} Sector", "symbols": stocks, "search_terms": [f"{sector.title()} Sector News"]}
 
-    # CASE C: Groups
+    # Group
     for group_name, stocks in GROUP_MAP.items():
         if group_name in q:
-            return {
-                "type": "group",
-                "name": f"{group_name.title()} Group",
-                "symbols": stocks,
-                "search_terms": [f"{group_name} Group News"]
-            }
+            return {"type": "group", "name": f"{group_name.title()} Group", "symbols": stocks, "search_terms": [f"{group_name} Group News"]}
 
-    # CASE D: Stock/Brand
-    sym = BRAND_TO_STOCK.get(q)
-    if not sym:
-        sym = q if q.endswith(".NS") else f"{q}.NS"
-    
-    return {
-        "type": "stock",
-        "symbol": sym,
-        "search_terms": [q, sym.replace(".NS","")]
-    }
+    # Stock/Brand Logic
+    sym = None
+    search_terms = [query] # Default search term is user query
+
+    if q in BRAND_TO_STOCK:
+        sym = BRAND_TO_STOCK[q]
+        # If it's a brand (e.g. DMART), add the Parent Company (Avenue Supermarts) to search terms
+        if sym in PARENT_NAMES:
+            search_terms.append(PARENT_NAMES[sym])
+        else:
+            search_terms.append(sym.replace(".NS",""))
+    else:
+        # Universal Search
+        found = search_symbol_on_yahoo(query)
+        if found:
+            sym = found
+            search_terms.append(sym)
+        else:
+            sym = query.upper() if (query.upper().endswith(".NS")) else f"{query.upper()}.NS"
+
+    return {"type": "stock", "symbol": sym, "search_terms": search_terms}
+
+def format_large_number(num):
+    if num is None: return "N/A"
+    if isinstance(num, str): return num
+    if num >= 1_000_000_000_000: return f"₹{round(num/1_000_000_000_000, 2)}T"
+    if num >= 1_000_000_000: return f"₹{round(num/1_000_000_000, 2)}B"
+    if num >= 1_000_000: return f"₹{round(num/1_000_000, 2)}M"
+    return f"₹{num}"
 
 def get_live_data(symbol):
-    """Generic fetcher for Stocks AND Commodities"""
+    """
+    Fetches stock data with DEMO INTERCEPTORS for Key Stocks.
+    """
+    
+    # ==========================================
+    # 🛑 DEMO MODE: HARDCODED FINANCIALS
+    # ==========================================
+
+    # 1. SBI BANK (Hardcoded)
+    if symbol == "SBIN.NS":
+        return {
+            "symbol": "SBIN",
+            "name": "State Bank of India",
+            "price": 948.10,
+            "change": 14.50,
+            "percent_change": 1.55,
+            "market_cap": "₹8,78,201Cr",
+            "pe_ratio": 10.47,
+            "day_high": 955.20,
+            "day_low": 938.00,
+            "currency": "INR",
+            "sector": "Financial Services",
+            "note": "Demo Mode: Financials hardcoded for presentation"
+        }
+
+    # 2. HDFC BANK (Hardcoded)
+    if symbol == "HDFCBANK.NS":
+        return {
+            "symbol": "HDFCBANK",
+            "name": "HDFC Bank Limited",
+            "price": 997.20,
+            "change": 8.40,
+            "percent_change": 0.85,
+            "market_cap": "₹15,38,943Cr",
+            "pe_ratio": 20.50,
+            "day_high": 1005.00,
+            "day_low": 988.50,
+            "currency": "INR",
+            "sector": "Financial Services",
+            "note": "Demo Mode: Financials hardcoded for presentation"
+        }
+
+    # 3. JUBLIANT FOODWORKS / DOMINO'S (Hardcoded)
+    if symbol == "JUBLFOOD.NS":
+        return {
+            "symbol": "JUBLFOOD",
+            "name": "Jubilant Foodworks (Domino's)",
+            "price": 590.90,
+            "change": 4.10, # Synthetic
+            "percent_change": 0.70,
+            "market_cap": "₹38,888Cr",
+            "pe_ratio": 101.96,
+            "day_high": 595.00,
+            "day_low": 585.50,
+            "currency": "INR",
+            "sector": "Consumer Cyclical",
+            "note": "Demo Mode: Financials hardcoded for presentation"
+        }
+
+    # 4. AVENUE SUPERMARTS / DMART (Hardcoded)
+    if symbol == "AVENUESUPER.NS":
+        return {
+            "symbol": "DMART", # Displaying popular name
+            "name": "Avenue Supermarts",
+            "price": 3913.30,
+            "change": 22.50, # Synthetic
+            "percent_change": 0.58,
+            "market_cap": "₹2,54,297Cr",
+            "pe_ratio": 93.09,
+            "day_high": 3940.00,
+            "day_low": 3890.00,
+            "currency": "INR",
+            "sector": "Consumer Defensive",
+            "note": "Demo Mode: Financials hardcoded for presentation"
+        }
+
+    # ==========================================
+    # 🟢 LIVE FETCH FOR OTHERS
+    # ==========================================
     try:
         ticker = yf.Ticker(symbol)
-        data = ticker.history(period="1d")
-        if data.empty: return None
         
-        current = data['Close'].iloc[-1]
-        prev = data['Open'].iloc[-1]
-        change = current - prev
-        pct = (change/prev)*100
+        # Use fast_info for reliability
+        current_price = ticker.fast_info.get('last_price')
+        prev_close = ticker.fast_info.get('previous_close')
         
-        # Safe info fetch
+        if current_price is None or prev_close is None:
+            data = ticker.history(period="1d")
+            if data.empty: return None
+            current_price = data['Close'].iloc[-1]
+            prev_close = data['Open'].iloc[-1]
+            
+        change = current_price - prev_close
+        pct_change = (change / prev_close) * 100
+        
         info = ticker.info
-        name = info.get('shortName', symbol)
+        name = info.get('shortName') or info.get('longName') or symbol
+        pe_ratio = info.get('trailingPE')
+        market_cap = info.get('marketCap')
+        sector = info.get('sector', 'N/A')
+        day_high = ticker.fast_info.get('day_high')
+        day_low = ticker.fast_info.get('day_low')
         
         return {
             "symbol": symbol.replace(".NS", "").replace("=F", ""),
             "name": name,
-            "price": round(current, 2),
+            "price": round(current_price, 2),
             "change": round(change, 2),
-            "percent_change": round(pct, 2),
+            "percent_change": round(pct_change, 2),
+            "market_cap": format_large_number(market_cap),
+            "pe_ratio": round(pe_ratio, 2) if pe_ratio else "N/A",
+            "day_high": round(day_high, 2) if day_high else "N/A",
+            "day_low": round(day_low, 2) if day_low else "N/A",
             "currency": info.get('currency', '?'),
-            "market_cap": info.get('marketCap', 'N/A'),
-            "pe_ratio": info.get('trailingPE', 'N/A'),
-            "sector": info.get('sector', 'Market'),
-            "day_high": round(data['High'].iloc[-1], 2),
-            "day_low": round(data['Low'].iloc[-1], 2)
+            "sector": sector
         }
-    except:
-        # Fallback Logic
-        import random
-        base_price = random.uniform(100, 3000)
-        change = random.uniform(-50, 50)
-        return {
-            "symbol": symbol.replace(".NS", "").replace("=F", ""),
-            "name": symbol,
-            "price": round(base_price, 2),
-            "change": round(change, 2),
-            "percent_change": round((change/base_price)*100, 2),
-            "currency": "INR",
-            "market_cap": "N/A",
-            "pe_ratio": "N/A",
-            "sector": "Unknown",
-            "day_high": round(base_price + 20, 2),
-            "day_low": round(base_price - 20, 2),
-            "note": "⚠️ Live data unavailable. Showing simulated data."
-        }
-
-def get_live_stock_price(symbol):
-    # Wrapper for backward compatibility if needed, or just alias it
-    return get_live_data(symbol)
+    except Exception as e:
+        print(f"Error fetching {symbol}: {e}")
+        return None
 
 def get_commodity_snapshot():
-    """Fetches list of top commodities"""
     data_list = []
     for name, ticker in COMMODITY_TICKERS.items():
         data = get_live_data(ticker)
         if data:
-            data['name'] = name # Override with friendly name
+            data['symbol'] = name 
             data_list.append(data)
     return data_list
 
 def get_market_overview():
-    indices = [{"name": "NIFTY 50", "price": 26218, "change": -18, "percent_change": -0.07}]
-    return {"indices": indices}
-
-def get_market_ticker():
-    symbols = ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS", "SBIN.NS", "ITC.NS", "TATAMOTORS.NS"]
-    ticker_data = []
-    for sym in symbols:
+    # Indices
+    indices = ["^NSEI", "^BSESN", "^NSEBANK"]
+    results = []
+    for sym in indices:
         d = get_live_data(sym)
         if d:
-            ticker_data.append({
-                "symbol": d['symbol'],
-                "last_price": d['price'],
-                "percent_change": d['percent_change']
-            })
-    return ticker_data
+            if sym == "^NSEI": d['name'] = "NIFTY 50"
+            elif sym == "^BSESN": d['name'] = "SENSEX"
+            elif sym == "^NSEBANK": d['name'] = "BANK NIFTY"
+            results.append(d)
+    return results
+
+def get_market_ticker():
+    return get_market_overview()

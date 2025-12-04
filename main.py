@@ -1,9 +1,10 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from graph import app as pipeline_app
 from database import global_db
 from stocks import resolve_query, get_live_data, get_commodity_snapshot, get_market_overview, get_market_ticker # <--- UPDATE IMPORTS
-from processor import search_topic_news
+from processor import search_topic_news, extract_text_from_pdf, extract_text_from_url, analyze_document_content, llm_analyst
+from langchain_core.messages import HumanMessage
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -22,6 +23,10 @@ class NewsRequest(BaseModel):
 
 class QueryRequest(BaseModel):
     query: str
+
+class CompareRequest(BaseModel):
+    stock1: str
+    stock2: str
 
 @app.get("/")
 def home():
@@ -106,6 +111,74 @@ def search_news(request: QueryRequest):
     """
     results = global_db.advanced_search(request.query)
     return {"results": results}
+
+@app.post("/analyze_doc")
+async def analyze_doc(
+    file: UploadFile = File(None), 
+    url: str = Form(None)
+):
+    """
+    Analyzes an uploaded file OR a URL.
+    """
+    raw_text = ""
+    
+    # 1. Get Text
+    if file:
+        content = await file.read()
+        raw_text = extract_text_from_pdf(content)
+    elif url:
+        raw_text = extract_text_from_url(url)
+    else:
+        return {"status": "error", "message": "No input provided"}
+    
+    # 2. Analyze
+    result = analyze_document_content(raw_text)
+    
+    return {"status": "success", "data": result}
+
+@app.post("/compare_stocks")
+def compare_stocks(req: CompareRequest):
+    # 1. Resolve and Fetch Stock 1
+    res1 = resolve_query(req.stock1)
+    data1 = get_live_data(res1['symbol']) if res1.get('symbol') else None
+    
+    # 2. Resolve and Fetch Stock 2
+    res2 = resolve_query(req.stock2)
+    data2 = get_live_data(res2['symbol']) if res2.get('symbol') else None
+
+    if not data1 or not data2:
+        return {"status": "error", "message": "Could not find data for one or both stocks."}
+
+    # 3. Fetch News for Context (Top 3 articles each)
+    news1 = search_topic_news([data1['symbol']])[:3]
+    news2 = search_topic_news([data2['symbol']])[:3]
+
+    # 4. Generate AI Verdict
+    prompt = f"""
+    Compare these two stocks based on the provided data and news headlines.
+    
+    Stock A: {data1['symbol']} | Price: {data1['price']} | PE: {data1.get('pe_ratio', 'N/A')} | Change: {data1['percent_change']}%
+    News A: {[n['text'] for n in news1]}
+    
+    Stock B: {data2['symbol']} | Price: {data2['price']} | PE: {data2.get('pe_ratio', 'N/A')} | Change: {data2['percent_change']}%
+    News B: {[n['text'] for n in news2]}
+    
+    Task: Provide a 3-sentence comparison verdict. Which one looks stronger in the short term?
+    """
+    
+    ai_verdict = "AI analysis unavailable."
+    try:
+        response = llm_analyst.invoke([HumanMessage(content=prompt)])
+        ai_verdict = response.content
+    except:
+        pass
+
+    return {
+        "status": "success",
+        "stock1": data1,
+        "stock2": data2,
+        "verdict": ai_verdict
+    }
 
 # --- RUNNER ---
 if __name__ == "__main__":

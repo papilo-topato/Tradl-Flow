@@ -225,7 +225,7 @@ def render_stock(data):
     st.markdown(f"""
     <div class="market-card">
         <div style="display:flex; justify-content:space-between;">
-            <div><h1>{info['symbol']}</h1><span style="color:#888;">{info['sector']}</span></div>
+            <div><h1>{info['symbol']}</h1><span style="color:#888;">{info.get('sector', 'N/A')}</span></div>
             <div style="text-align:right;"><h1>₹{info['price']}</h1><span class="{color}">{info['change']} ({info['percent_change']}%)</span></div>
         </div>
     </div>
@@ -371,21 +371,149 @@ with st.sidebar:
 # --- MAIN ROUTING ---
 if page == "🚀 Terminal":
     st.title("🌊 Tradl Flow")
-    st.markdown("#### The Intelligent Market Workspace")
+    
+    # TABS DEFINITION
+    tab1, tab2, tab3 = st.tabs(["🔎 Market Search", "📄 Document Analyst", "⚖️ Stock Face-Off"])
+    
+    # === TAB 1: EXISTING SEARCH ===
+    with tab1:
+        st.markdown("#### The Intelligent Market Workspace")
+        
+        query = st.text_input("Search (e.g., 'Domino\\'s', 'Tata', 'Gold', 'Banks')...", placeholder="Type a company, sector, or brand...")
 
-    query = st.text_input("Search (e.g., 'Domino\\'s', 'Tata', 'Gold', 'Banks')...", placeholder="Type a company, sector, or brand...")
+        if query:
+            perform_search(query)
+        else:
+            st.info("👋 Welcome to Tradl Flow. Start by searching for a stock, sector, or brand.")
+            st.write("OR Select a Quick Access Module:")
+            c1, c2, c3, c4 = st.columns(4)
+            if c1.button("🏦 Banks"): perform_search("Banks")
+            if c2.button("🚗 Auto"): perform_search("Auto")
+            if c3.button("🛢️ Oil"): perform_search("Oil")
+            if c4.button("🪙 Gold"): perform_search("Gold")
+            
+    # === TAB 2: DOCUMENT ANALYST (UPDATED) ===
+    with tab2:
+        st.markdown("#### 📄 AI Document Analyst")
+        st.write("Upload a PDF report or paste a news URL to extract insights.")
+        
+        # WRAP IN FORM TO FIX ENTER KEY & BUTTON ISSUES
+        with st.form("analyst_form"):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                uploaded_file = st.file_uploader("Upload PDF", type=['pdf'])
+            
+            with col2:
+                # Pressing Enter here will now submit the form
+                url_input = st.text_input("OR Paste Article URL", placeholder="https://moneycontrol.com/...")
+            
+            # CENTERED SUBMIT BUTTON
+            submitted = st.form_submit_button("🚀 Analyze Document", use_container_width=True)
+            
+            if submitted:
+                if not uploaded_file and not url_input:
+                    st.warning("⚠️ Please provide a PDF or a URL.")
+                else:
+                    with st.spinner("🤖 Reading & Analyzing... (Llama 3.2 is thinking)"):
+                        try:
+                            # Construct Payload
+                            files = {}
+                            data = {}
+                            
+                            if uploaded_file:
+                                files = {"file": (uploaded_file.name, uploaded_file, "application/pdf")}
+                            elif url_input:
+                                data = {"url": url_input}
+                            
+                            # Call API
+                            if files:
+                                res = requests.post(f"{API_URL}/analyze_doc", files=files)
+                            else:
+                                res = requests.post(f"{API_URL}/analyze_doc", data=data)
+                            
+                            if res.status_code == 200:
+                                response = res.json()
+                                result = response.get('data', {})
+                                
+                                if result.get("is_relevant"):
+                                    st.success("✅ Analysis Complete")
+                                    # Render Analysis Box
+                                    st.markdown(f"""
+                                    <div style="background-color:#1e1e1e; color:#ffffff; padding:20px; border-radius:10px; border-left: 5px solid #4CAF50;">
+                                        <h3>📊 Executive Summary</h3>
+                                        <div style="white-space: pre-wrap; font-family: sans-serif; color:#ddd; font-size: 15px; line-height: 1.6;">{result['analysis']}</div>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                else:
+                                    st.warning(result.get("message"))
+                            else:
+                                st.error(f"Server Error: {res.status_code}")
+                                
+                        except Exception as e:
+                            st.error(f"Connection Error: {str(e)}")
 
-    if query:
-        perform_search(query)
-    else:
-        st.info("👋 Welcome to Tradl Flow. Start by searching for a stock, sector, or brand.")
-
-        st.write("OR Select a Quick Access Module:")
-        c1, c2, c3, c4 = st.columns(4)
-        if c1.button("🏦 Banks"): perform_search("Banks")
-        if c2.button("🚗 Auto"): perform_search("Auto")
-        if c3.button("🛢️ Oil"): perform_search("Oil")
-        if c4.button("🪙 Gold"): perform_search("Gold")
+    # === TAB 3: COMPARISON MODULE ===
+    with tab3:
+        st.markdown("#### ⚖️ Compare Stocks")
+        st.write("Analyze two stocks side-by-side with AI-driven insights.")
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            s1 = st.text_input("Stock A", placeholder="e.g. HDFC Bank")
+        with c2:
+            s2 = st.text_input("Stock B", placeholder="e.g. ICICI Bank")
+            
+        if st.button("⚔️ Run Comparison"):
+            if s1 and s2:
+                with st.spinner("🤖 Gathering Data & Debating..."):
+                    try:
+                        res = requests.post(f"{API_URL}/compare_stocks", json={"stock1": s1, "stock2": s2})
+                        resp = res.json()
+                        
+                        if resp.get("status") == "success":
+                            d1 = resp['stock1']
+                            d2 = resp['stock2']
+                            
+                            # METRICS TABLE
+                            st.markdown("### 📊 Head-to-Head Metrics")
+                            
+                            col1, col2, col3 = st.columns([1,1,1])
+                            
+                            # Custom metric display
+                            def metric_row(label, val1, val2):
+                                color1 = "#4CAF50" if val1 > val2 else "#ffffff"
+                                color2 = "#4CAF50" if val2 > val1 else "#ffffff"
+                                return f"""
+<div style="display:flex; justify-content:space-between; border-bottom:1px solid #333; padding:10px;">
+    <div style="width:30%; text-align:center; color:{color1}; font-weight:bold;">{val1}</div>
+    <div style="width:40%; text-align:center; color:#888;">{label}</div>
+    <div style="width:30%; text-align:center; color:{color2}; font-weight:bold;">{val2}</div>
+</div>"""
+                            
+                            html_content = f"""
+<div style="background-color:#1e1e1e; border-radius:10px; padding:15px;">
+    <div style="display:flex; justify-content:space-between; font-size:18px; font-weight:bold; margin-bottom:15px; border-bottom:2px solid #555; padding-bottom:10px;">
+        <div style="width:30%; text-align:center;">{d1['symbol']}</div>
+        <div style="width:40%; text-align:center;">VS</div>
+        <div style="width:30%; text-align:center;">{d2['symbol']}</div>
+    </div>
+    {metric_row("Price (₹)", d1['price'], d2['price'])}
+    {metric_row("Day Change (%)", d1['percent_change'], d2['percent_change'])}
+    {metric_row("P/E Ratio", d1.get('pe_ratio',0) or 0, d2.get('pe_ratio',0) or 0)}
+</div>"""
+                            st.markdown(html_content, unsafe_allow_html=True)
+                            
+                            # AI VERDICT
+                            st.markdown("### 🧠 AI Verdict")
+                            st.info(resp['verdict'])
+                            
+                        else:
+                            st.error(resp.get("message", "Error comparing stocks."))
+                    except Exception as e:
+                        st.error(f"Connection Error: {e}")
+            else:
+                st.warning("Enter two stock names to compare.")
 
 elif page == "👤 About the Architect":
     st.title("Raghuram K S")
